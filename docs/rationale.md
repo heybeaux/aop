@@ -30,7 +30,7 @@ The wedge is that last row, and it's already in the README: OTel's own GenAI SIG
 
 ## Spec / impl split — what actually separates
 
-- **Spec (AOP) owns:** the envelope schema, field semantics ("what does `reasoning.consensus` mean", "how is `prediction.confidence` calibrated"), versioning, conformance levels (e.g. minimal = identity + governance; full = all six faculties), and a JSON Schema / protobuf definition.
+- **Spec (AOP) owns:** the envelope schema, field semantics ("what does `reasoning.consensus` mean", "how is `prediction.confidence` calibrated"), versioning, conformance levels (`minimal` = identity only; `governance` = identity + governance; `full` = all six faculties — see `semantic-conventions.md`, which is normative), and a JSON Schema / protobuf definition.
 - **Sonder (impl) owns:** how events are *produced* — faculty integration, the in-process bus, ULID generation, the query/audit surface, storage. None of that is normative for the spec.
 
 Litmus test: if a Python LangGraph shop can emit a conformant AOP event **without importing a line of Sonder**, the split is real. That's the goal.
@@ -82,7 +82,7 @@ The six faculty blocks (`$defs`) port over near-verbatim from the real `SonderEv
 
 **What the spec deliberately leaves out — and why it matters.** The real `SonderEventV2` carries `chain_prev_hash`, `chain_self_hash`, and `signature` (the tamper-evident hash chain + ed25519 signing). Those are **Sonder-implementation** concerns, *not* normative for AOP — they're how *one* producer makes its log tamper-evident, not part of the observation contract. Drawing that line is the whole point of the spec/impl split: a conformant non-Sonder emitter is not required to chain-and-sign. Sonder may stash those in `metadata` or layer them as an optional AOP signing profile later. Keeping them out of v0.1 is what stops the spec from being "Sonder's serialization format with a new name."
 
-**Conformance tiers** keep adoption cheap: *minimal* requires only identity + `governance`; *standard* adds `memory` + `reasoning`; *full* requires all six. A shop with no Parliament/LeWM equivalent can still emit conformant minimal events.
+**Conformance tiers** keep adoption cheap: *minimal* requires only identity; *governance* adds the `governance` block; *full* requires all six. (Tier names are normative in `semantic-conventions.md` — `minimal`/`governance`/`full`; "standard" is deliberately avoided since it collides with the `lod_level` enum value.) A shop with no Parliament/LeWM equivalent can still emit conformant minimal events.
 
 ## Capability-based routing (the second idea)
 
@@ -96,7 +96,7 @@ This rides cleanly on ADR 0001: the State Contract ≈ A2A Agent Card, so capabi
 
 1. **Lift the schema** — `aop/schema/v0.1/...json`, derived from `SonderEvent`, add `aop_version` + `trace_context`. (Low risk, high signal.)
 2. **Make Sonder emit against the schema** — validate `SonderEvent` serialization conforms; Sonder becomes "AOP reference impl."
-3. **Conformance tiers doc** — minimal/standard/full, so non-Sonder runtimes have an on-ramp.
+3. **Conformance tiers doc** — minimal/governance/full, so non-Sonder runtimes have an on-ramp.
 4. **Capability-based routing as a Lattice RFC** — separate track, records decisions into AOP but doesn't bloat the envelope.
 
 ## Decisions (2026-06-15)

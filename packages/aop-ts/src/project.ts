@@ -26,11 +26,18 @@ export interface ToAopOptions {
   /** OTel trace/span IDs to attach. The producer's execution-layer tracer
    *  supplies these; AOP does not own them. */
   trace_context?: AopTraceContext;
-  /** Top-level keys to demote into metadata (reference-impl provenance such
-   *  as version/chain/signature). Defaults to none. */
+  /** Explicit subset of non-spec keys to quarantine into metadata. When omitted
+   *  (the default), ALL non-spec top-level keys are quarantined — the spec
+   *  requires impl provenance MUST NOT appear at the AOP top level, so
+   *  spec-clean is the default, not an opt-in. Spec fields are never demoted
+   *  even if listed here. */
   demoteKeys?: readonly string[];
-  /** metadata sub-key the demoted provenance is nested under. Default 'impl'. */
+  /** metadata sub-key the quarantined provenance is nested under. Default 'impl'. */
   demoteNamespace?: string;
+  /** Opt back into the legacy passthrough: let non-spec keys ride at the AOP
+   *  top level (schema is additionalProperties:true). Off by default because it
+   *  can leak provenance the spec forbids at the top level. */
+  allowExtraKeys?: boolean;
 }
 
 const SPEC_FIELDS = new Set([
@@ -54,23 +61,37 @@ const SPEC_FIELDS = new Set([
 
 /** Project any AopSource into an AOP v0.1 envelope. Pure and total. */
 export function toAopEvent(source: AopSource, options: ToAopOptions = {}): AopEvent {
-  const demoteKeys = options.demoteKeys ?? [];
   const demoteNamespace = options.demoteNamespace ?? 'impl';
+  const allowExtraKeys = options.allowExtraKeys ?? false;
   const src = source as Record<string, unknown>;
 
+  // Which non-spec keys to quarantine. Explicit list if given (spec fields
+  // filtered out so they're never demoted); otherwise every non-spec key.
+  const isQuarantined = (k: string): boolean => {
+    if (SPEC_FIELDS.has(k)) return false;
+    if (options.demoteKeys) return options.demoteKeys.includes(k);
+    return true; // default: quarantine all non-spec keys
+  };
+
   const provenance: Record<string, unknown> = {};
-  for (const key of demoteKeys) {
-    if (key in src && src[key] !== undefined) provenance[key] = src[key];
+  for (const [k, v] of Object.entries(src)) {
+    if (v !== undefined && isQuarantined(k)) provenance[k] = v;
   }
 
-  const baseMetadata = source.metadata;
-  const mergedMetadata: Record<string, unknown> | undefined =
-    baseMetadata !== undefined || Object.keys(provenance).length > 0
-      ? {
-          ...(baseMetadata ?? {}),
-          ...(Object.keys(provenance).length > 0 ? { [demoteNamespace]: provenance } : {}),
-        }
-      : undefined;
+  const baseMetadata = source.metadata as Record<string, unknown> | undefined;
+  const hasProvenance = Object.keys(provenance).length > 0;
+  let mergedMetadata: Record<string, unknown> | undefined;
+  if (baseMetadata !== undefined || hasProvenance) {
+    mergedMetadata = { ...(baseMetadata ?? {}) };
+    if (hasProvenance) {
+      // Merge into an existing namespace rather than clobbering caller data.
+      const existing = mergedMetadata[demoteNamespace];
+      mergedMetadata[demoteNamespace] =
+        existing && typeof existing === 'object' && !Array.isArray(existing)
+          ? { ...(existing as Record<string, unknown>), ...provenance }
+          : provenance;
+    }
+  }
 
   const aop: AopEvent = {
     aop_version: AOP_VERSION,
@@ -97,13 +118,14 @@ export function toAopEvent(source: AopSource, options: ToAopOptions = {}): AopEv
   if (source.payload !== undefined) aop.payload = source.payload;
   if (mergedMetadata !== undefined) aop.metadata = mergedMetadata;
 
-  // Pass through any non-standard producer fields (schema is
-  // additionalProperties: true), minus the keys already demoted.
-  const aopRecord = aop as unknown as Record<string, unknown>;
-  const demoted = new Set(demoteKeys);
-  for (const [k, v] of Object.entries(src)) {
-    if (SPEC_FIELDS.has(k) || demoted.has(k) || v === undefined) continue;
-    aopRecord[k] = v;
+  // Opt-in legacy passthrough: surface any non-spec key NOT quarantined at the
+  // AOP top level. Off by default so the envelope stays spec-clean.
+  if (allowExtraKeys) {
+    const aopRecord = aop as unknown as Record<string, unknown>;
+    for (const [k, v] of Object.entries(src)) {
+      if (SPEC_FIELDS.has(k) || v === undefined || isQuarantined(k)) continue;
+      aopRecord[k] = v;
+    }
   }
 
   return aop;

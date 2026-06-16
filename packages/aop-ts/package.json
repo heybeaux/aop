@@ -15,11 +15,10 @@
     }
   },
   "files": [
-    "dist",
-    "../../spec/v0.1"
+    "dist"
   ],
   "scripts": {
-    "build": "tsup src/index.ts --format esm,cjs --dts --clean",
+    "build": "tsup src/index.ts --format esm,cjs --dts --shims --clean && node -e \"require('node:fs').mkdirSync('dist/spec/v0.1',{recursive:true});require('node:fs').copyFileSync('../../spec/v0.1/agent-observation-event.schema.json','dist/spec/v0.1/agent-observation-event.schema.json')\"",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "dev": "tsup src/index.ts --format esm,cjs --dts --watch",

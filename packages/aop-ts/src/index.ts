@@ -25,6 +25,6 @@ export {
 export {
   getValidator,
   validateAopEvent,
-  SCHEMA_PATH,
+  schemaPath,
   type ValidationResult,
 } from './validate.js';
