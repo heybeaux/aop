@@ -9,18 +9,21 @@ conformant event without importing a specific implementation.
 
 ## Why this exists
 
-OpenTelemetry instruments *execution* (spans, metrics, logs). Its GenAI SIG
-**explicitly defers** the cognitive fields — what memory was active, what the
-agent was permitted to do, what reasoning path was taken — to the application
-layer. AOP **is** that deferred layer, standardized, and stays complementary to
-OTel (an AOP event can carry the OTel trace/span IDs of its execution sibling).
+When an agent acts, the *why* evaporates. Logs and traces capture what ran —
+which function, how long, what error. They do not capture what the agent knew
+when it decided, what it was permitted to do, what it reasoned, or what it
+predicted would happen. That context lives for one turn inside a model's prompt
+and is gone.
 
-| OpenTelemetry | Agent Observation Protocol |
-|---|---|
-| Spec + semantic conventions | AOP envelope schema + cognitive semantic conventions |
-| SDKs / Collector (reference impl) | Sonder (reference impl) |
-| Instruments execution | Instruments cognition |
-| GenAI SIG defers cognitive fields | AOP standardizes them |
+AOP makes the *why* a first-class, durable record. It defines a versioned event
+that an agent emits at decision points, capturing the cognitive state behind the
+action: the recall that informed it, the reasoning that produced it, the policy
+that permitted it, the capabilities it had, the outcome it predicted, the intent
+it carried. The result is an agent decision you can inspect, govern, and replay
+after the fact — instead of a black box you can only re-run and hope.
+
+It is vendor-, runtime-, and transport-agnostic. The schema is the contract; any
+runtime in any language can emit a conformant event.
 
 ## Spec / impl split
 
@@ -28,14 +31,18 @@ OTel (an AOP event can carry the OTel trace/span IDs of its execution sibling).
   tiers, versioning. Plus `@heybeaux/aop`, the TypeScript bindings (types +
   projection helpers + schema validator).
 - **[Sonder](https://github.com/heybeaux/sonder)** — the reference
-  implementation: an in-process event bus that produces AOP events from six
-  faculties, with a tamper-evident hash chain, signing, and an audit log. None
-  of those runtime concerns are normative for AOP.
+  implementation: an in-process event bus that produces AOP events, with a
+  tamper-evident hash chain, signing, and an audit log. None of those runtime
+  concerns are normative for AOP.
 
-**Litmus test:** a Python LangGraph shop can emit a conformant AOP event without
-importing a line of Sonder. The `@heybeaux/aop` test suite proves the
-TypeScript side of this — it validates projected events against the schema with
-no Sonder dependency.
+**Litmus test:** a runtime that has none of Sonder's internals — say a Python
+LangGraph shop with its own retriever, its own policy check, its own planner —
+can emit a conformant AOP event by mapping its existing concepts onto the
+generic faculty fields, without importing a line of Sonder. The schema's
+vocabulary is the domain (recall, reasoning, policy decision, tool capability,
+forecast, intent), not any one product's subsystems. The `@heybeaux/aop` test
+suite proves the TypeScript side — it validates projected events against the
+schema with no Sonder dependency.
 
 ## Layout
 

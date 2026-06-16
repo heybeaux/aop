@@ -92,7 +92,7 @@ describe('toAopEvent — conformance', () => {
     expect(aop.governance).toEqual(src.governance);
   });
 
-  it('attaches trace_context when supplied (OTel interop)', () => {
+  it('attaches trace_context when supplied (execution-span link)', () => {
     const aop = toAopEvent(governanceSource(), {
       demoteKeys: SONDER_KEYS,
       trace_context: { trace_id: 't-1', span_id: 's-1' },

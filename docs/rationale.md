@@ -15,18 +15,42 @@ The repositioning is to split those two things explicitly:
 
 This is the move that turns Sonder from "our runtime" into "the thing everyone's runtime speaks."
 
-## The OpenTelemetry analogy
+## Why this is its own category
 
-OTel is the precedent, and it's almost exact:
+Execution observability — logs, traces, metrics — answers *what ran*. It is a
+solved, crowded space. AOP deliberately does not compete there. It answers a
+different question that nothing today standardizes: *why did the agent decide
+this?*
 
-| OpenTelemetry | Agent Observation Protocol |
-|---|---|
-| Spec + semantic conventions (the standard) | AOP envelope schema + cognitive semantic conventions |
-| SDKs/Collector (reference impl) | Sonder (reference impl) |
-| Instruments *execution* — spans, metrics, logs | Instruments *cognition* — capability, memory, reasoning, governance, prediction, intent |
-| GenAI SIG **explicitly defers** cognitive fields to the app layer | AOP **is** that deferred layer, standardized |
+Those are orthogonal. An execution trace tells you a tool was called and
+returned in 200ms. It cannot tell you the agent called that tool because recall
+surfaced a relevant memory, the reasoning step reached consensus on it, and the
+governing policy permitted it. The first is mechanical; the second is cognitive.
+AOP is the cognitive record, and it's a category because the questions it
+answers — *what did the agent know, what was it allowed to do, why did it decide*
+— recur in every agent system regardless of stack:
 
-The wedge is that last row, and it's already in the README: OTel's own GenAI SIG punted on "what memory was active, what the agent was permitted to do, what reasoning path was taken." That's not a gap we invented — it's a gap the standards body openly declined to fill. AOP fills it, and stays *complementary* to OTel rather than competing (AOP events can carry/reference OTel trace+span IDs; an AOP event is the cognitive sibling of an OTel span).
+- **Audit / accountability** — reconstruct, after the fact, the basis for a
+  decision a human or regulator now questions.
+- **Governance** — record which policy permitted or blocked an action, with the
+  evidence, not just that it happened.
+- **Replay / debugging** — re-examine a decision with its actual cognitive
+  inputs instead of re-running and hoping for the same nondeterministic path.
+- **Cross-runtime portability** — a shared vocabulary so a decision emitted by
+  one agent framework is legible to a tool built for another.
+
+If a field doesn't help answer "what did the agent know / was allowed to do / why
+did it decide," it doesn't belong in the envelope. That test, not any analogy to
+an existing standard, is what defines the spec's scope.
+
+### Interop with execution traces
+
+AOP carries an **optional** `trace_context` (`{ trace_id, span_id }`) so a
+cognitive event can be linked to the execution span it accompanies, if the
+runtime already produces execution traces. This is a convenience field for
+correlation, not a dependency: AOP neither requires nor assumes any particular
+execution-tracing system, and an emitter that produces no traces at all is fully
+conformant.
 
 ## Spec / impl split — what actually separates
 
@@ -39,7 +63,7 @@ Litmus test: if a Python LangGraph shop can emit a conformant AOP event **withou
 
 The current `SonderEvent` is a TypeScript `interface` — implementation-bound. Step one is lifting it into a neutral, versioned schema that any language can target.
 
-Done — lifted to `aop/schema/v0.1/agent-observation-event.schema.json` (JSON Schema draft 2020-12, the OTel-style lingua franca, and the human-readable spec of record) **and** a parallel `agent_observation_event.proto` (proto3) for cross-language codegen and high-volume wire use. The two MUST stay in sync.
+Done — lifted to `aop/schema/v0.1/agent-observation-event.schema.json` (JSON Schema draft 2020-12, the human-readable spec of record) **and** a parallel `agent_observation_event.proto` (proto3) for cross-language codegen and high-volume wire use. The two MUST stay in sync.
 
 Sketch (derived directly from today's `SonderEventCore`, made neutral and versioned — the committed file is the full version):
 
@@ -59,7 +83,7 @@ Sketch (derived directly from today's `SonderEventCore`, made neutral and versio
     "timestamp": { "type": "string", "format": "date-time" },
     "trace_context": {
       "type": "object",
-      "description": "OTel interop — link to the execution-layer span",
+      "description": "Optional link to an execution-layer span, if one exists",
       "properties": { "trace_id": {"type":"string"}, "span_id": {"type":"string"} }
     },
     "capabilities": { "$ref": "#/$defs/capabilities" },
@@ -76,9 +100,9 @@ Sketch (derived directly from today's `SonderEventCore`, made neutral and versio
 
 Two deliberate additions vs. today's interface:
 1. **`aop_version`** — the spec is now versioned at the envelope level. Non-negotiable for a standard.
-2. **`trace_context`** — explicit OTel linkage, so AOP is positioned as complementary (cognitive sibling of a span), not a rival.
+2. **`trace_context`** — optional linkage to an execution-layer span, for runtimes that already emit execution traces and want to correlate. Not a dependency.
 
-The six faculty blocks (`$defs`) port over near-verbatim from the real `SonderEventCore` — that's the proof the schema isn't a rewrite, it's a lift. The lift also carries the post-execution fields the README sketch omitted (`outcome`, `resources`, `paths`) and Lattice's policy `evidence`/`tier` and `approval_gate`.
+The six faculty blocks (`$defs`) were initially lifted near-verbatim from the real `SonderEventCore` — fast to ship, and honest about origin. **That lift is also the v0.1 schema's central weakness:** the faculty fields are Sonder's subsystems (Parliament's `osi`, Lattice's `l1/l2/l3`, Engram's `dream_cycle`) rather than generic agent concepts, so a non-Sonder runtime can't actually fill a `full` event. v0.2 fixes this by inverting the model — generic fields are normative, impl specifics demote to `metadata.<impl>`. See `v0.2-generic-faculties.md`. The post-execution fields (`outcome`, `resources`, `paths`) are already generic and stay as-is.
 
 **What the spec deliberately leaves out — and why it matters.** The real `SonderEventV2` carries `chain_prev_hash`, `chain_self_hash`, and `signature` (the tamper-evident hash chain + ed25519 signing). Those are **Sonder-implementation** concerns, *not* normative for AOP — they're how *one* producer makes its log tamper-evident, not part of the observation contract. Drawing that line is the whole point of the spec/impl split: a conformant non-Sonder emitter is not required to chain-and-sign. Sonder may stash those in `metadata` or layer them as an optional AOP signing profile later. Keeping them out of v0.1 is what stops the spec from being "Sonder's serialization format with a new name."
 

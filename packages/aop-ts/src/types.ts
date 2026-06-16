@@ -100,7 +100,7 @@ export interface OutcomeContext {
   error?: string;
 }
 
-/** OTel interop block — links a cognitive event to its execution span. */
+/** Optional link from a cognitive event to its execution-layer span, if any. */
 export interface AopTraceContext {
   trace_id?: string;
   span_id?: string;

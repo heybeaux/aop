@@ -23,8 +23,8 @@ import {
 } from './types.js';
 
 export interface ToAopOptions {
-  /** OTel trace/span IDs to attach. The producer's execution-layer tracer
-   *  supplies these; AOP does not own them. */
+  /** Optional execution-span trace/span IDs to attach. The producer's
+   *  execution-layer tracer supplies these; AOP does not own them. */
   trace_context?: AopTraceContext;
   /** Explicit subset of non-spec keys to quarantine into metadata. When omitted
    *  (the default), ALL non-spec top-level keys are quarantined — the spec

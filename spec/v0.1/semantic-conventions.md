@@ -16,7 +16,7 @@ this document is authoritative for interpretation.
 | `task_id` | Identifier of the unit of work this observation belongs to. |
 | `timestamp` | ISO 8601 UTC instant the observation was produced. |
 | `parent_id` | Optional id of the causally preceding event (call tree / step chain). |
-| `trace_context` | Optional OTel interop: `{ trace_id, span_id }` of the execution span this cognitive event accompanies. |
+| `trace_context` | Optional `{ trace_id, span_id }` linking this cognitive event to an execution-layer span, if the runtime produces one. Pure correlation; not required for conformance. |
 
 ## Cognitive blocks (all optional)
 
