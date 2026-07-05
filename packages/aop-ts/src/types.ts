@@ -106,8 +106,44 @@ export interface AopTraceContext {
   span_id?: string;
 }
 
+/**
+ * Semantic identity of a single payload field (AOP v0.2). Mirrors the
+ * `field_contract` $def in agent-observation-event.schema.json and Sonder's
+ * shipped `FieldContract` (packages/core/src/types/contract.ts). The `concept`
+ * and `unit` are declared by the field owner and transmitted to the peer — never
+ * inferred from the wire `name`. Two fields match IFF concept AND unit are equal.
+ */
+export interface FieldContract {
+  /** Wire name — advisory only; allowed to differ between peers (honest renames). */
+  name: string;
+  /** Physical wire type. */
+  wire: 'string' | 'int' | 'float' | 'bool' | 'enum';
+  /** Semantic concept ID (e.g. 'order.total.posttax'). Never inferred from name. */
+  concept: string;
+  /** Unit as part of the type: 'cents_pretax' | 'epoch_ms' | 'epoch_s' | 'none' | ... */
+  unit: string;
+}
+
+/**
+ * A complete payload contract (AOP v0.2). Mirrors the `payload_contract` $def
+ * and Sonder's shipped `PayloadContract`. `stateful` / `edge_regions` are exp-11
+ * contract terms (probing cannot recover them), hence carried in the contract.
+ */
+export interface PayloadContract {
+  /** Stable hash of the canonicalized fields. Deterministic, order-independent. */
+  contract_id: string;
+  fields: FieldContract[];
+  /** exp-11: whether the producing surface is stateful (probing self-poisons on it). */
+  stateful?: boolean;
+  /** exp-11: human-readable enumeration of cliffs/promos/thresholds probing can't find. */
+  edge_regions?: string[];
+}
+
 /** AOP spec version this binding targets. */
 export const AOP_VERSION = '0.1' as const;
+
+/** AOP v0.2 spec version — v0.1 + the optional payload_contract block. */
+export const AOP_VERSION_V02 = '0.2' as const;
 
 /**
  * AOP v0.1 envelope. Mirrors agent-observation-event.schema.json. Only the
@@ -137,6 +173,16 @@ export interface AopEvent {
 
   payload?: unknown;
   metadata?: Record<string, unknown>;
+}
+
+/**
+ * AOP v0.2 envelope. Identical to {@link AopEvent} except `aop_version` is
+ * `'0.2'` and the optional `payload_contract` block may be present. Mirrors
+ * agent-observation-event.schema.json under spec/v0.2/.
+ */
+export interface AopEventV02 extends Omit<AopEvent, 'aop_version'> {
+  aop_version: typeof AOP_VERSION_V02;
+  payload_contract?: PayloadContract;
 }
 
 /**

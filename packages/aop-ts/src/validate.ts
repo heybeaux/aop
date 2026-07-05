@@ -18,6 +18,7 @@ const addFormats = (addFormatsNs as unknown as { default: typeof import('ajv-for
   .default;
 
 const SCHEMA_REL = 'spec/v0.1/agent-observation-event.schema.json';
+const SCHEMA_REL_V02 = 'spec/v0.2/agent-observation-event.schema.json';
 
 /**
  * Directory of this module. tsup is built with `--shims`, so `import.meta.url`
@@ -41,30 +42,38 @@ function moduleDir(): string | null {
  * (so `npm install @heybeaux/aop` works from anywhere), then fall back to
  * walking up from cwd for in-repo development against the source spec.
  */
-function resolveSchemaPath(): string {
+function resolveSchemaPath(rel: string): string {
   const here = moduleDir();
   if (here) {
-    const packaged = resolve(here, SCHEMA_REL);
+    const packaged = resolve(here, rel);
     if (existsSync(packaged)) return packaged;
   }
   let dir = process.cwd();
   for (let i = 0; i < 8; i++) {
-    const candidate = resolve(dir, SCHEMA_REL);
+    const candidate = resolve(dir, rel);
     if (existsSync(candidate)) return candidate;
     const parent = dirname(dir);
     if (parent === dir) break;
     dir = parent;
   }
-  return resolve(process.cwd(), SCHEMA_REL);
+  return resolve(process.cwd(), rel);
 }
 
 let cached: ValidateFunction | null = null;
 let cachedSchemaPath: string | null = null;
+let cachedV02: ValidateFunction | null = null;
+let cachedSchemaPathV02: string | null = null;
 
-/** Resolved path to the normative schema this validator compiles. */
+/** Resolved path to the normative v0.1 schema this validator compiles. */
 export function schemaPath(): string {
-  cachedSchemaPath ??= resolveSchemaPath();
+  cachedSchemaPath ??= resolveSchemaPath(SCHEMA_REL);
   return cachedSchemaPath;
+}
+
+/** Resolved path to the normative v0.2 schema this validator compiles. */
+export function schemaPathV02(): string {
+  cachedSchemaPathV02 ??= resolveSchemaPath(SCHEMA_REL_V02);
+  return cachedSchemaPathV02;
 }
 
 /**
@@ -85,6 +94,23 @@ export function getValidator(schemaFile?: string): ValidateFunction {
   return cached;
 }
 
+/**
+ * Compile (once) and return the AOP v0.2 validate function. Pass an explicit
+ * `schemaFile` to override resolution; doing so bypasses and resets the cache.
+ */
+export function getValidatorV02(schemaFile?: string): ValidateFunction {
+  if (schemaFile) {
+    cachedSchemaPathV02 = schemaFile;
+    cachedV02 = null;
+  }
+  if (cachedV02) return cachedV02;
+  const schema = JSON.parse(readFileSync(schemaPathV02(), 'utf8'));
+  const ajv = new Ajv2020({ strict: false, allErrors: true });
+  addFormats(ajv);
+  cachedV02 = ajv.compile(schema);
+  return cachedV02;
+}
+
 export interface ValidationResult {
   valid: boolean;
   errors: ValidateFunction['errors'];
@@ -93,6 +119,13 @@ export interface ValidationResult {
 /** Validate a candidate AOP event against the v0.1 schema. */
 export function validateAopEvent(candidate: unknown): ValidationResult {
   const validate = getValidator();
+  const valid = validate(candidate) as boolean;
+  return { valid, errors: valid ? null : validate.errors };
+}
+
+/** Validate a candidate AOP event against the v0.2 schema. */
+export function validateAopEventV02(candidate: unknown): ValidationResult {
+  const validate = getValidatorV02();
   const valid = validate(candidate) as boolean;
   return { valid, errors: valid ? null : validate.errors };
 }
