@@ -47,15 +47,31 @@ schema with no Sonder dependency.
 ## Layout
 
 ```
-spec/v0.1/
+spec/v0.1/                              # frozen — published, immutable
   agent-observation-event.schema.json   # normative JSON Schema
   agent_observation_event.proto         # protobuf wire schema
   semantic-conventions.md               # field semantics & conformance tiers
+spec/v0.2/                              # v0.1 + optional payload_contract
+  agent-observation-event.schema.json
+  agent_observation_event.proto
+  semantic-conventions.md
 packages/
   aop-ts/                               # @heybeaux/aop — types, projection, validator
 docs/
   rationale.md                          # the repositioning one-pager
 ```
+
+## Versions
+
+- **v0.1** — the envelope: authenticates *authorship* and *history*. Frozen;
+  `spec/v0.1/**` is immutable.
+- **v0.2** — v0.1 + an optional `payload_contract` block that authenticates
+  *meaning*. Each field declares a `concept` + `unit` transmitted to the peer, so
+  a false friend (same wire name, different meaning — e.g. pre- vs post-tax
+  cents, ms vs sec) is caught at handshake time instead of corrupting data
+  silently. Consumers branch on `aop_version`; v0.1 emitters stay conformant. See
+  [`spec/v0.2/semantic-conventions.md`](spec/v0.2/semantic-conventions.md)
+  ("Payload contracts & negotiation semantics").
 
 ## Conformance tiers
 
